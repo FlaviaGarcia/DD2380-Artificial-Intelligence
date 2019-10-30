@@ -2,505 +2,749 @@ import java.util.StringTokenizer;
 import java.util.Vector;
 
 /**
- * Represents a game state with a 4x4 board
+ * Represents a game state with a 8x8 checkers board.
  *
  * Cells are numbered as follows:
  *
- *    col 0  1  2  3  
- * row  ---------------
- *  0  |  0  1  2  3  |  0
- *  1  |  4  5  6  7  |  1
- *  2  |  8  9  10 11 |  2
- *  3  | 12  13 14 15 |  3
- *      ---------------
- *        0  1  2  3
- 
+ *    col 0  1  2  3  4  5  6  7
+ * row  -------------------------
+ *  0  |     0     1     2     3 |  0
+ *  1  |  4     5     6     7    |  1
+ *  2  |     8     9    10    11 |  2
+ *  3  | 12    13    14    15    |  3
+ *  4  |    16    17    18    19 |  4
+ *  5  | 20    21    22    23    |  5
+ *  6  |    24    25    26    27 |  6
+ *  7  | 28    29    30    31    |  7
+ *      -------------------------
+ *        0  1  2  3  4  5  6  7
  *
- * The staring board looks like this:
+ * The starting board looks like this:
  *
- *    col 0  1  2  3  
- * row  ---------------
- *  0  |  .  .  .  .  |  0
- *  1  |  .  .  .  .  |  1
- *  2  |  .  .  .  .  |  2
- *  3  |  .  .  .  .  |  3
- *      ---------------
- *        0  1  2  3
+ *    col 0  1  2  3  4  5  6  7
+ * row  -------------------------
+ *  0  |    rr    rr    rr    rr |  0
+ *  1  | rr    rr    rr    rr    |  1
+ *  2  |    rr    rr    rr    rr |  2
+ *  3  | ..    ..    ..    ..    |  3
+ *  4  |    ..    ..    ..    .. |  4
+ *  5  | ww    ww    ww    ww    |  5
+ *  6  |    ww    ww    ww    ww |  6
+ *  7  | ww    ww    ww    ww    |  7
+ *      -------------------------
+ *        0  1  2  3  4  5  6  7
+ *
+ * The red player starts from the top of the board (row 0,1,2)
+ * The white player starts from the bottom of the board (row 5,6,7),
+ * Red moves first.
  * 
- * X moves first.
+ * Note that there is one way of representing the cells with one number and one
+ * way of representing them with two. You may use either one.
  */
-
 public class GameState {
-    public static final int BOARD_SIZE = 4;
-    public static final int CELL_COUNT = BOARD_SIZE * BOARD_SIZE;
+  public static final int NUMBER_OF_SQUARES = 32; // 32 valid squares
+  public static final int PIECES_PER_PLAYER = 12; // 12 pieces per player
+  public static final int MOVES_UNTIL_DRAW = 50; // 25 moves per player
 
-    private static final int LINE_NONE = 0;
-    private static final int LINE_WIN  = 1;
-    private static final int LINE_DRAW = 2;
+  private int[] mCell = new int[GameState.NUMBER_OF_SQUARES];
+  private int mMovesUntilDraw;
+  private int mNextPlayer;
+  private Move mLastMove;
 
-    private int[] cells = new int[GameState.CELL_COUNT];
-    private int nextPlayer;
-    private Move lastMove;
-
-    /**
-     * Initializes the board to the starting position.
-     */
-    public GameState() {
-      /* Initialize the board */
-      for (int i = 0; i < CELL_COUNT; i++) {
-          this.cells[i] = Constants.CELL_EMPTY;
-      }
-      /* Initialize move related variables */
-      this.lastMove = new Move(Move.MOVE_BOG);
-      // Player X starts
-      this.nextPlayer = Constants.CELL_X;
+  /**
+   * Initialises the board to the starting position.
+   */
+  public GameState() {
+    /* Initialise the board */
+    for(int i = 0; i < GameState.PIECES_PER_PLAYER; i++) {
+      this.mCell[i] = Constants.CELL_RED;
+      this.mCell[NUMBER_OF_SQUARES-1-i] = Constants.CELL_WHITE;
     }
 
-    /**
-     * Constructs a board from a message string.
-     *
-     * @param pMessage the compact string representation of the state
-     */
-    public GameState(final String pMessage) {
-      // Split the message with a string
-      StringTokenizer st = new StringTokenizer(pMessage);
+    for(int i = GameState.PIECES_PER_PLAYER;
+        i < GameState.NUMBER_OF_SQUARES - GameState.PIECES_PER_PLAYER;
+        i++) {
+      this.mCell[i] = Constants.CELL_EMPTY;
+    }
 
-      String board, last_move, next_player;
-      board = st.nextToken();
-      last_move = st.nextToken();
-      next_player = st.nextToken();
+    // Initialise move related variables
+    this.mLastMove = new Move(Move.MOVE_BOG);
+    this.mMovesUntilDraw = GameState.MOVES_UNTIL_DRAW;
+    this.mNextPlayer = Constants.CELL_RED;
+  }
 
-      /* Sanity checks. If any of these fail, something has gone horribly
-       * wrong. */
-      assert(board.length() == GameState.CELL_COUNT);
-      assert(next_player.length() == 1);
-      
-      // Parse the board
-      for (int i = 0; i < GameState.CELL_COUNT; ++i) {
-        if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_EMPTY]) {
-          this.cells[i] = Constants.CELL_EMPTY;
-        }
-        else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_X]) {
-          this.cells[i] = Constants.CELL_X;
-        }
-        else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_O]) {
-          this.cells[i] = Constants.CELL_O;
-        }
-        else
-          assert("Invalid cell" == "");
-      }
+  /**
+   * Constructs a board from a message string.
+   *
+   * @param pMessage the compact string representation of the state
+   */
+  public GameState(final String pMessage) {
+    // Split the message with a string
+    StringTokenizer st = new StringTokenizer(pMessage);
 
-      // Parse last move
-      this.lastMove = new Move(last_move);
+    String board, last_move, next_player;
+    int moves_left;
 
-      // Parse next player
-      if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_EMPTY]) {
-        this.nextPlayer = Constants.CELL_EMPTY;
-      }
-      else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_X]) {
-        this.nextPlayer = Constants.CELL_X;
-      }
-      else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_O]) {
-        this.nextPlayer = Constants.CELL_O;
-      }
-      else
-      {
-        assert("Invalid cell" == "");
+    board = st.nextToken();
+    last_move = st.nextToken();
+    next_player = st.nextToken();
+    moves_left = Integer.parseInt(st.nextToken());
+
+    /* Sanity checks. If any of these fail, something has gone horribly
+     * wrong. */
+    assert(board.length() == GameState.NUMBER_OF_SQUARES);
+    assert(next_player.length() == 1);
+    assert(moves_left >= 0 && moves_left < 256);
+
+    // Parse the board
+    for (int i = 0; i < GameState.NUMBER_OF_SQUARES; i++) {
+      if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_EMPTY]) {
+        this.mCell[i] = Constants.CELL_EMPTY;
+      } else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_RED]) {
+        this.mCell[i] = Constants.CELL_RED;
+      } else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_WHITE]) {
+        this.mCell[i] = Constants.CELL_WHITE;
+      } else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_RED | Constants.CELL_KING]) {
+        this.mCell[i] = Constants.CELL_RED | Constants.CELL_KING;
+      } else if (board.charAt(i) == Constants.MESSAGE_SYMBOLS[Constants.CELL_WHITE | Constants.CELL_KING]) {
+        this.mCell[i] = Constants.CELL_WHITE | Constants.CELL_KING;
+      } else {
+        // ???
+        //assert("Invalid cell" && false);
       }
     }
 
-    /**
-     * Constructs a board which is the result of applying move move to board 
-     * gameState.
-     *
-     * @param gameState the starting board position
-     * @param move the movement to perform
-     * @see DoMove()
-     */
-    public GameState(final GameState gameState, final Move move) {
-      /* Copy board */
-      this.cells = gameState.cells.clone();
+    // Parse last move
+    this.mLastMove = new Move(last_move);
 
-      /* Copy move status */
-      this.nextPlayer = gameState.nextPlayer;
-      this.lastMove = gameState.lastMove;
-
-      /* Perform move */
-      this.doMove(move);
+    // Parse next player
+    if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_EMPTY]) {
+      mNextPlayer = Constants.CELL_EMPTY;
+    } else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_RED]) {
+      mNextPlayer = Constants.CELL_RED;
+    } else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_WHITE]) {
+      mNextPlayer = Constants.CELL_WHITE;
+    } else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_RED | Constants.CELL_KING]) {
+      mNextPlayer = Constants.CELL_RED | Constants.CELL_KING;
+    } else if (next_player.charAt(0) == Constants.MESSAGE_SYMBOLS[Constants.CELL_WHITE | Constants.CELL_KING]) {
+      mNextPlayer = Constants.CELL_WHITE | Constants.CELL_KING;
+    } else {
+      // ???
+      //assert("Invalid next player" && false);
     }
 
-    /**
-     * Gets whether or not the current move marks the end of the game.
-     */
-    boolean isEOG() {
-      return this.lastMove.isEOG();
-    }
+    // Set number of moves left until draw
+    this.mMovesUntilDraw = moves_left;
+  }
 
-    /**
-     * Gets whether or not the last move ended in a win for X player.
-     */
-    boolean isXWin() {
-      return this.lastMove.isXWin();
-    }
+  /**
+   * Constructs a board which is the result of applying move pMove to board 
+   * pRH.
+   *
+   * @param pRH the starting board position
+   * @param pMove the movement to perform
+   * @see DoMove()
+   */
+  public GameState(final GameState pRH, final Move pMove) {
+    /* Copy board */
+    this.mCell = pRH.mCell.clone();
 
-    /**
-     * Gets whether or not the last move ended in a win for O player.
-     */
-    boolean isOWin() {
-      return lastMove.isOWin();
-    }
+    /* Copy move status */
+    this.mMovesUntilDraw = pRH.mMovesUntilDraw;
+    this.mNextPlayer   = pRH.mNextPlayer;
+    this.mLastMove     = pRH.mLastMove;
 
-    /**
-     * Gets the row corresponding to an index in the array representation of
-     * the board.
-     * 
-     * @param cell
-     * @return the row corresponding to a cell index
-     */
-    public static int cellToRow(int cell) {
-      return cell / BOARD_SIZE;
-    }
+    /* Perform move */
+    this.doMove(pMove);
+  }
 
-    /**
-     * Gets the column corresponding to an index in the array representation of
-     * the board.
-     * 
-     * @param cell
-     * @return the column corresponding to a cell index
-     */
-    public static int cellToCol(int cell) {
-      return cell % BOARD_SIZE;
-    }
-
-    /**
-     * Gets the index in the array representation of the board given column,
-     * row and layer indexes.
-     * 
-     * @param row
-     * @param column
-     * @return cell index corresponding to the row and column indexes
-     */
-    public static int rowColumnToCell(int row, int column)
-      {
-          return column + row * BOARD_SIZE;
-      }
-
-    /**
-     * Gets the content of a cell in the board, from row and column number.
-     *
-     * Rows are numbered (0 to BOARD_SIZE - 1) from the upper row in the board,
-     * as seen by the player this program is playing.
-     *
-     * Columns are numbered starting from the left (also 0 to BOARD_SIZE - 1).
-     *
-     * If the cell falls outside of the board, return CELL_INVALID
-     */
-    public int at(int row, int column) {
-      if ((row < 0) || (row > BOARD_SIZE - 1) || (column < 0) || (column > BOARD_SIZE - 1))
-        return Constants.CELL_INVALID;
-      return cells[rowColumnToCell(row, column)];
-    }
-
-    /**
-     * Returns the content of a cell in the board.
-     *
-     * This function returns a byte representing the contents of the cell,
-     * using the integer values of cells
-     *
-     * For example, to check if cell 10 contains a O piece, you would check if
-     *
-     * (at(10) & CELL_O)
-     *
-     * to check if it is a X piece,
-     *
-     * (at(10) & CELL_X)
-     *
-     */
-    public int at(int pos) {
-      assert(pos >= 0);
-      assert(pos < CELL_COUNT);
-      return cells[pos];
-    }
-    
-    private void set(int pos, int cell) {
-      assert(pos >= 0);
-      assert(pos < CELL_COUNT);
-      cells[pos] = cell;
-    }
-    
-    /**
-     * Gets the last move made (the move that led to the current state).
-     */
-    public final Move getMove() {
-      return this.lastMove;
-    }
-
-    /**
-     * Gets the next player (the player whose turn is after this one).
-     */
-    public final int getNextPlayer() {
-      return this.nextPlayer;
-    }
-
-    /** Win or Draw for board */
-    private int checkLines(int thePlayer) {
-      int result;
-      int draws = 0;
-
-      for (int row = 0; row < BOARD_SIZE; ++row) {
-        result = checkLine(thePlayer, row, 0, row, BOARD_SIZE - 1);
-        if (result == LINE_DRAW) { draws++; }
-        if (result == LINE_WIN) { return LINE_WIN; }
-      }
-      for (int col = 0; col < BOARD_SIZE; ++col) {
-        result = checkLine(thePlayer, 0, col, BOARD_SIZE - 1, col);
-        if (result == LINE_DRAW) { draws++; }
-        if (result == LINE_WIN) { return LINE_WIN; }
-      }
-
-      result = checkLine(thePlayer, 0, 0, BOARD_SIZE - 1, BOARD_SIZE - 1);
-      if (result == LINE_DRAW) { draws++; }
-      if (result == LINE_WIN) { return LINE_WIN; }
-      result = checkLine(thePlayer, 0, BOARD_SIZE - 1, BOARD_SIZE - 1, 0);
-      if (result == LINE_DRAW) { draws++; }
-      if (result == LINE_WIN) { return LINE_WIN; }
-
-      if (draws == 2 * BOARD_SIZE + 2)
-      {
-        return LINE_DRAW;
-      }
-
-      return LINE_NONE;
-    }
-
-    /** Win or Draw for line */
-    private int checkLine(int player, int row1, int col1, int row2, int col2) {
-       int dRow = (row2 - row1) / (BOARD_SIZE - 1);
-       int dCol = (col2 - col1) / (BOARD_SIZE - 1);
-       int opponent = (player == Constants.CELL_X) ? Constants.CELL_O : Constants.CELL_X;
-
-       int playerCells = 0, opponentCells = 0;
-
-       for (int i = 0; i < BOARD_SIZE; ++i) {
-         if (cells[rowColumnToCell(row1 + dRow * i, col1 + dCol * i)] == player) {
-           playerCells++;
-         }
-         if (cells[rowColumnToCell(row1 + dRow * i, col1 + dCol * i)] == opponent) {
-           opponentCells++;
-         }
-         if ((playerCells > 0) && (opponentCells > 0))
-         {
-             return LINE_DRAW;
-         }
-       }
-       
-       return ((playerCells == BOARD_SIZE) ? LINE_WIN : LINE_NONE);
-    }
-
-    /**
-    * Checks if the move ends up being a special move (Winning = 1, Draw = 2)
-    * @param cell the cell where the move is tried
-    * @param player player who is making the move
-    */
-    private int isSpecialMove(int cell, int player)
-    {
-      // The cell should be empty
-      int oldCell = cells[cell];
-      cells[cell] = player;
-      int result = checkLines(player);
-      cells[cell] = oldCell;
-      return (result == LINE_WIN) ? 1 :
-             (result == LINE_DRAW) ? 2 : 0;
-    }
-
-    /**
-      * Tries to make a move onto a certain position
-      * @param moves a vector where the valid moves will be inserted
-      * @param cell the cell where the move is tried
-      */
-    private void tryMove(Vector<Move> moves, int cell) {
-      int row = GameState.cellToRow(cell);
-      int column = GameState.cellToCol(cell);
-      int specialMove = Move.SPECIAL_NONE;
-      // Try move X
-      if (this.nextPlayer == Constants.CELL_X) {
-        // Try move
-        if(this.at(row, column) == Constants.CELL_EMPTY) {
-          //Check if special move
-          specialMove = this.isSpecialMove(cell, Constants.CELL_X);
-          if(specialMove != Move.SPECIAL_NONE) {
-            moves.add(new Move(cell, Constants.CELL_X, specialMove));
-          }
-          else {
-            moves.add(new Move(cell, Constants.CELL_X)); 
-          }
-        }                   
-      }
-      // Try move O
-      if (this.nextPlayer == Constants.CELL_O) {
-        // Try move
-        if (this.at(row, column) == Constants.CELL_EMPTY) {
-          // Check if special move
-          specialMove = this.isSpecialMove(cell, Constants.CELL_O);
-          if (specialMove > 0) {
-            moves.add(new Move(cell, Constants.CELL_O, specialMove));
-          }
-          else {
-            moves.add(new Move(cell, Constants.CELL_O)); 
-          }
-        }
+  /**
+   * Constructs a state that is the result of rotating the board 180 degrees 
+   * and swapping colours.
+   *
+   */
+  GameState reversed() {
+    /* Create new GameState */
+    GameState result = new GameState();
+    for (int i = 0; i < NUMBER_OF_SQUARES; i++) {
+      if (this.mCell[31-i] == Constants.CELL_EMPTY) {
+        result.mCell[i] = Constants.CELL_EMPTY;
+      } else {
+        result.mCell[i] = this.mCell[31-i] ^
+        			(Constants.CELL_RED | Constants.CELL_WHITE);
       }
     }
 
-    /**
-     * Finds possible moves and stores these in a vector in the current game
-     * state.
-     *
-     * @param states the current game state
-     */
-    public void findPossibleMoves(Vector<GameState> states) {
-      states.clear();
+    result.mLastMove = this.mLastMove.reversed();
+    result.mNextPlayer = this.mNextPlayer ^
+    			(Constants.CELL_RED | Constants.CELL_WHITE);
+    result.mMovesUntilDraw = this.mMovesUntilDraw;
+    return result;
+  }
 
-      if (lastMove.isEOG()) {
-        return;
+  /**
+   * Gets the content of a cell in the board.
+   *
+   * This function returns a byte representing the contents of the cell,
+   * using the enumeration values in ECell
+   *
+   * For example, to check if cell 23 contains a white piece, you would check if
+   *
+   * (lBoard.At(23)&CELL_WHITE)
+   *
+   * to check if it is a red piece,
+   *
+   *   (lBoard.At(23)&CELL_RED)
+   *
+   * and to check if it is a king, you would check if
+   *
+   *   (lBoard.At(23)&CELL_KING)
+   */
+  int get(int pPos) {
+  	/* Sanity checks. If any of these fail, something has gone horribly
+     * wrong. */
+    assert(pPos >= 0);
+    assert(pPos < NUMBER_OF_SQUARES);
+    return mCell[pPos];
+  }
+
+  /**
+   * Sets the content of a cell in the board.
+   */
+  void set(int pPos, int v) {
+  	/* Sanity checks. If any of these fail, something has gone horribly
+     * wrong. */
+    assert(pPos >= 0);
+    assert(pPos < NUMBER_OF_SQUARES);
+    mCell[pPos] = v;
+  }
+
+  /**
+   * Gets the content of a cell in the board, from row and column number.
+   *
+   * Rows are numbered (0 to 7) from the upper row in the board,
+   * as seen by the player this program is playing.
+   *
+   * Columns are numbered starting from the left (also 0 to 7).
+   *
+   * Cells corresponding to white squares in the board, which will
+   * never contain a piece, always return CELL_INVALID
+   *
+   * If the cell falls outside of the board, return CELL_INVALID
+   *
+   * You can use it in the same way as the version that requires a cell index
+   */
+  int get(int pR, int pC) {
+    if (pR < 0 || pR > 7 || pC < 0 || pC > 7) {
+      return Constants.CELL_INVALID;
+    }
+
+    if ((pR & 1) == (pC & 1)) {
+      return Constants.CELL_INVALID;
+    }
+
+    return this.mCell[pR * 4 + (pC >> 1)];
+  }
+
+  /**
+   * Sets the content of a cell in the board, from row and column number.
+   * 
+   * Note that this is a private function.
+   */
+  private void set(int pR, int pC, int v) {
+    /* This is a bit ugly, but is useful for the implementation of
+     * FindPossibleMoves. It won't affect single-threaded programs
+     * and you're not allowed to use threads anyway. */
+    this.mCell[pR * 4 + (pC >> 1)] = v;
+  }
+
+
+  /**
+   * Gets the row corresponding to an index in the array representation of
+   * the board.
+   * 
+   * @param pCell
+   * @return the row corresponding to a cell index
+   */
+  public static int cellToRow(int pCell) {
+    return ((pCell) >> 2);
+  }
+
+  /**
+   * Gets the column corresponding to an index in the array representation of
+   * the board.
+   * 
+   * @param pCell
+   * @return the col corresponding to a cell index
+   */
+  public static int cellToCol(int pCell) {
+    int lC = ((pCell) & 3) << 1;
+	//int lC = (pCell) & 3;
+	
+    if ( 0 == ((pCell) & 4) ) {
+      lC++;
+    }
+	
+    return lC;
+  }
+
+  /**
+   * Gets the index in the array representation of the board which corresponds
+   * to a certain row and column number.
+   * 
+   * It doesn't check if it corresponds to a black square in the board,
+   * or if it falls within the board.
+   *
+   * If it doesn't, the result is undefined, and the program is likely
+   * to crash
+   *
+   * @param pRow
+   * @param pCol
+   * @return the cell corresponding to a row and col
+   */
+  static int rowColToCell(int pRow, int pCol) {
+    return (pRow * 4 + (pCol >> 1));
+  }
+
+  private boolean tryJump(Vector<Move> pMoves, int pR, int pC, boolean pKing,
+      int[] pBuffer) {
+    return this.tryJump(pMoves, pR, pC, pKing, pBuffer, 0);
+  }
+  
+  /**
+   * Tries to make a jump (capture a piece) from a certain position of the
+   * board.
+   *
+   * @param pMoves a vector where the valid moves will be inserted
+   * @param pOther the ECell code corresponding to the player who is not 
+   * 		making the move
+   * @param pR the row of the cell we are capturing from
+   * @param pC the column we are capturing from
+   * @param pKing true if the capturing piece is a king
+   * @param pBuffer a buffer where the list of jump positions is
+   * 		inserted (for multiple jumps)
+   * @param pDepth the number of multiple jumps before this attempt
+   */
+  private boolean tryJump(Vector<Move> pMoves, int pR, int pC, boolean pKing, 
+  		int[] pBuffer, int pDepth) {
+    /* Remove the capturing piece temporarily */
+    int lOldSelf = this.get(pR, pC);
+    this.set(pR, pC, Constants.CELL_EMPTY);
+
+    pBuffer[pDepth] = GameState.rowColToCell(pR, pC);
+
+    boolean lFound = false;
+    int lOther = mNextPlayer ^ (Constants.CELL_WHITE | Constants.CELL_RED);
+
+    // Try capturing downwards
+    if(mNextPlayer == Constants.CELL_RED || pKing) {
+      // Try capturing left
+      if( 0 != (this.get(pR+1, pC-1) & lOther) &&
+    		  	this.get(pR+2,pC-2) == Constants.CELL_EMPTY) {
+        lFound = true;
+        int lOldValue = get(pR+1, pC-1);
+        this.set(pR+1, pC-1, Constants.CELL_EMPTY);
+        this.tryJump(pMoves, pR+2, pC-2, pKing, pBuffer, pDepth + 1);
+        this.set(pR+1, pC-1, lOldValue);
       }
 
-      Vector<Move> moves = new Vector<Move>();
-      
-      for (int k = 0; k < CELL_COUNT; ++k)
-      {
-        tryMove(moves, k);        
-      }
-      
-      // Convert moves to GameStates
-      for (int i = 0; i < moves.size(); ++i) {
-        states.add(new GameState(this, moves.elementAt(i)));
+      // Try capturing right
+      if( 0 != (this.get(pR+1, pC+1) & lOther) &&
+    		  	this.get(pR+2,pC+2) == Constants.CELL_EMPTY) {
+        lFound = true;
+        int lOldValue = this.get(pR+1, pC+1);
+        this.set(pR+1, pC+1, Constants.CELL_EMPTY);
+        this.tryJump(pMoves, pR+2, pC+2, pKing, pBuffer, pDepth + 1);
+        this.set(pR+1, pC+1, lOldValue);
       }
     }
 
-    /**
-     * Transforms the board by performing a move.
-     *
-     * Note: This doesn't check that the move is valid, so you should only use
-     * it with moves returned by findPossibleMoves.
-     * 
-     * @param move the move to perform
-     */
-    public void doMove(final Move move) {
-      // Set the cell
-      set(move.at(0), move.at(1));
-     
-      // Remember last move
-      lastMove = move;
-
-      // Swap player
-      nextPlayer = nextPlayer ^ (Constants.CELL_X | Constants.CELL_O);
+    // Try capturing upwards
+    if(mNextPlayer == Constants.CELL_WHITE || pKing) {
+      // Try capturing left
+      if( 0 != (this.get(pR-1, pC-1) & lOther) &&
+    		  	this.get(pR-2, pC-2) == Constants.CELL_EMPTY) {
+        lFound = true;
+        int lOldValue = this.get(pR-1, pC-1);
+        this.set(pR-1, pC-1, Constants.CELL_EMPTY);
+        this.tryJump(pMoves, pR-2, pC-2, pKing, pBuffer, pDepth + 1);
+        this.set(pR-1, pC-1, lOldValue);
+      }
+      // Try capturing right
+      if( 0 != (this.get(pR-1, pC+1) & lOther) &&
+    		  	this.get(pR-2, pC+2) == Constants.CELL_EMPTY) {
+        lFound = true;
+        int lOldValue = this.get(pR-1, pC+1);
+        this.set(pR-1, pC+1, Constants.CELL_EMPTY);
+        this.tryJump(pMoves, pR-2, pC+2, pKing, pBuffer, pDepth + 1);
+        this.set(pR-1, pC+1, lOldValue);
+      }
     }
 
-    /**
-     * Compares two game states.
-     * 
-     * @param gameState game state to compare to
-     * @return true if game states are identical, otherwise false
-     */
-    public boolean isEqual(GameState gameState)
-    {
-  	  boolean equal = true;
-  	  for (int i = 0; i < CELL_COUNT; ++i)
-  		 if (cells[i] != gameState.at(i))
-  			 equal = false;
-  	  if (nextPlayer != gameState.getNextPlayer())
-  		  equal = false;
-  	  if (!lastMove.toMessage().equals(gameState.getMove().toMessage()))
-  		  equal = false;
-  	  return equal;
+    /* Restore the capturing piece */
+    this.set(pR, pC, lOldSelf);
+
+    if(!lFound && pDepth > 0) {
+      Vector<Integer> tmp = new Vector<Integer>();
+      for (int z : pBuffer) {
+        tmp.add(z);
+      }
+      pMoves.add(new Move(tmp, pDepth+1));
+    }
+    return lFound;
+  }
+
+  /**
+   * Tries to make a move from a certain position, and inserts valid move
+   * choices into a vector.
+   *
+   * @param pMoves vector where the valid moves will be inserted
+   * @param pCell the cell where the move is tried from
+   * @param pOther the ECell code corresponding to the player
+   *     who is not making the move
+   * @param pKing true if the piece is a king
+   */
+  void tryMove(Vector<Move> pMoves, int pCell, boolean pKing) {
+    int lR = GameState.cellToRow(pCell);
+    int lC = GameState.cellToCol(pCell);
+    // Try moving downwards
+    if(mNextPlayer == Constants.CELL_RED || pKing) {
+      // Try moving right
+      if(this.get(lR+1,lC-1) == Constants.CELL_EMPTY) {
+        pMoves.add(new Move(pCell, GameState.rowColToCell(lR+1, lC-1)));
+      }
+
+      //try moving left
+      if(this.get(lR+1, lC+1) == Constants.CELL_EMPTY) {
+        pMoves.add(new Move(pCell, GameState.rowColToCell(lR+1, lC+1)));
+      }
     }
 
-    /**
-     * Converts the board to a human-readable string for printing purposes.
-     *
-     * Note: Use for debug purposes and print to System.err. Don't call it in
-     * the final version.
-     */
-    public String toString(int player) {
-      // Select preferred printing style by setting cell_text to SIMPLE_TEXT, UNICODE_TEXT or COLOR_TEXT
-      // Note: this code is intended for BOARD_SIZE = 4
-      final String[] cell_text = Constants.COLOR_TEXT;
-      final String board_top    = (cell_text == Constants.SIMPLE_TEXT) ? "     -----------------\n"
-              : "    ╭─────────╮\n";
-      final String board_bottom = (cell_text == Constants.SIMPLE_TEXT) ? "     -----------------\n"
-              : "    ╰─────────╯\n";
-      final String board_left   = (cell_text == Constants.SIMPLE_TEXT) ? "| " : "│ ";
-      final String board_right  = (cell_text == Constants.SIMPLE_TEXT) ? "|" : "│";
-
-      boolean is_winner = (isEOG() && ((player == Constants.CELL_X && isXWin()) || (player == Constants.CELL_O && isOWin())));
-      boolean is_my_turn = (nextPlayer == player);
-      int X_pieces = 0;
-      int O_pieces = 0;
-      
-      for (int i = 0; i < CELL_COUNT; ++i) {
-        if ((at(i) & Constants.CELL_X) != 0)
-          ++X_pieces;
-        else if ((at(i) & Constants.CELL_O) != 0)
-          ++O_pieces;
+    // Try moving upwards
+    if(mNextPlayer == Constants.CELL_WHITE || pKing) {
+      // Try moving right
+      if(this.get(lR-1, lC-1) == Constants.CELL_EMPTY) {
+        pMoves.add(new Move(pCell, GameState.rowColToCell(lR-1, lC-1)));
       }
-
-      /* Use a StringBuffer to compose the string */
-      StringBuffer ss = new StringBuffer();
-
-      /* Draw the board with numbers around it indicating cell index */
-      ss.append(board_top);
-      ss.append("  0 " + board_left);
-      for(int c = 0; c < BOARD_SIZE; c++) {
-        ss.append(cell_text[this.at(0, c)]);
+      // Try moving left
+      if(this.get(lR-1, lC+1) == Constants.CELL_EMPTY) {
+        pMoves.add(new Move(pCell, GameState.rowColToCell(lR-1,lC+1)));
       }
-      ss.append(board_right + " 3 ");
-      ss.append("  Last move: " + lastMove.toString() + (is_winner ? " (WOHO! I WON!)\n" : "\n"));
-      
-      ss.append("  4 " + board_left);
-      for(int c = 0; c < BOARD_SIZE; c++) {
-        ss.append(cell_text[this.at(1, c)]);
-      }
-      ss.append(board_right + " 7 ");
-      ss.append("  Next player: " + cell_text[nextPlayer] + (is_my_turn ? " (My turn)\n" : " (Opponents turn)\n"));
-      
-      ss.append("  8 " + board_left);
-      for(int c = 0; c < BOARD_SIZE; c++) {
-          ss.append(cell_text[this.at(2, c)]);
-      }
-      ss.append(board_right + " 11");
-      ss.append("  X pieces: " + String.valueOf(X_pieces) + "\n");    
-
-      ss.append(" 12 " + board_left);
-      for(int c = 0; c < BOARD_SIZE; c++) {
-          ss.append(cell_text[this.at(3, c)]);
-      }
-      ss.append(board_right + " 15");
-      ss.append("  O pieces: " + String.valueOf(O_pieces) + "\n"); 
-      ss.append(board_bottom);
-
-      return ss.toString();
-    }
-
-    /**
-     * Converts the board to a machine-readable string ready to be printed to
-     * System.out.
-     *
-     * Note: This is used for passing board states between clients.
-     */
-    public String toMessage() {
-      // Use a StringBuffer to compose the message
-      StringBuffer ss = new StringBuffer();
-
-      // The board goes first
-      for (int i = 0; i < CELL_COUNT; i++) {
-        ss.append(Constants.MESSAGE_SYMBOLS[cells[i]]);
-      }
-
-      // Then the information about moves
-      assert((nextPlayer == Constants.CELL_O) || (nextPlayer == Constants.CELL_X));
-      ss.append(" " + lastMove.toMessage() + " " + Constants.MESSAGE_SYMBOLS[nextPlayer]);
-
-      return ss.toString();
     }
   }
+
+  /**
+   * Finds possible moves and stores these in a vector in the current game
+   * state.
+   *
+   * @param pStates the current game state
+   */
+  void findPossibleMoves(Vector<GameState> pStates) {
+    pStates.clear();
+
+    if (mLastMove.isEOG()) {
+      return;
+    }
+
+    if (mMovesUntilDraw <= 0) {
+      pStates.add(new GameState(this, new Move(Move.MOVE_DRAW)));
+      return;
+    }
+
+    // Normal moves are forbidden if any jump is possible
+    boolean lFound = false;
+    int[] lPieces = new int[GameState.PIECES_PER_PLAYER];
+    int[] lMoveBuffer = new int[GameState.PIECES_PER_PLAYER];
+    Vector<Move> lMoves = new Vector<Move>();
+
+    int lNumPieces=0;
+    for (int i = 0; i < NUMBER_OF_SQUARES; i++) {
+      // Is this a piece which belongs to the player making the move?
+      if (0 != (this.get(i) & mNextPlayer)) {
+        boolean lIsKing = 0 != (this.get(i) & Constants.CELL_KING);
+
+        if (this.tryJump(lMoves, GameState.cellToRow(i), GameState.cellToCol(i),
+        				 lIsKing, lMoveBuffer)) {
+          lFound=true;
+        }
+        lPieces[lNumPieces++]=i;
+      }
+    }
+
+    // Try normal moves if no possible jump was found
+    if (!lFound) {
+      for (int k = 0; k < lNumPieces; k++) {
+        int lCell = lPieces[k];
+        boolean lIsKing = 0 != (this.get(lCell) & Constants.CELL_KING);
+        this.tryMove(lMoves, lCell, lIsKing);
+      }
+    }
+
+    // Convert moves to GameStates
+    for (int i = 0; i < lMoves.size(); i++) {
+      pStates.add(new GameState(this, lMoves.elementAt(i)));
+    }
+
+    // Admit loss if no moves can be found
+    if (pStates.size() == 0) {
+      pStates.add(new GameState(this, new Move(
+          mNextPlayer == Constants.CELL_WHITE ? Move.MOVE_RW : Move.MOVE_WW)));
+    }
+  }
+
+  /**
+   * Transforms the board by performing a move.
+   *
+   * Note: This doesn't check that the move is valid, so you should only use
+   * it with moves returned by FindPossibleMoves.
+   * 
+   * @param pMove the move to perform
+   */
+  public void doMove(final Move pMove) {
+    if (pMove.isJump()) {
+      // Row and column of source cell
+      int sr = GameState.cellToRow(pMove.at(0));
+      int sc = GameState.cellToCol(pMove.at(0));
+
+      // Perform all jumps
+      for(int i = 1; i < pMove.length(); i++) {
+        // Destination cell
+        int dr = GameState.cellToRow(pMove.at(i));
+        int dc = GameState.cellToCol(pMove.at(i));
+
+        // Move the jumping piece
+        this.set(pMove.at(i), this.get(pMove.at(i-1)));
+        this.set(pMove.at(i-1), Constants.CELL_EMPTY);
+
+        // Promote to king if we should
+        if (
+            (dr == 7 && 0 != (this.get(pMove.at(i)) & Constants.CELL_RED) )
+            ||
+            (dr == 0 && 0 != (this.get(pMove.at(i)) & Constants.CELL_WHITE) )
+          ) {
+
+          this.set(pMove.at(i), this.get(pMove.at(i)) | Constants.CELL_KING);
+
+        }
+
+        // Remove the piece being jumped over (captured)
+        this.set(
+            GameState.rowColToCell((sr+dr)>>1, (sc+dc)>>1),
+            Constants.CELL_EMPTY
+            );
+
+        // Prepare for next jump
+        sr = dr;
+        sc = dc;
+      }
+
+      // Reset number of moves left until draw
+      mMovesUntilDraw = MOVES_UNTIL_DRAW;
+
+    } else if(pMove.isNormal()) {
+      // Move the piece
+      this.set(pMove.at(1), this.get(pMove.at(0)));
+      this.set(pMove.at(0), Constants.CELL_EMPTY);
+
+      // Promote to king if we should
+      int lDR = GameState.cellToRow(pMove.at(1));
+      if (
+          (lDR == 7 && 0 != (this.get(pMove.at(1)) & Constants.CELL_RED)) ||
+          (lDR == 0 && 0 != (this.get(pMove.at(1)) & Constants.CELL_WHITE))
+        ) {
+        this.set(pMove.at(1), this.get(pMove.at(1)) | Constants.CELL_KING);
+
+      }
+
+      // Decrease number of moves left until draw
+      --mMovesUntilDraw;
+    }
+
+    // Remember last move
+    mLastMove = pMove;
+
+    // Swap player
+    mNextPlayer = mNextPlayer ^ (Constants.CELL_RED | Constants.CELL_WHITE);
+  }
+
+  /**
+   * Converts the board to a human-readable string for printing purposes.
+   *
+   * Note: Use for debug purposes and print to System.err. Don't call it in
+   * the final version.
+   */
+  public String toString(int pPlayer) {
+    // Select preferred printing style by setting cell_text to SIMPLE_TEXT, UNICODE_TEXT or COLOR_TEXT
+
+    final String[] cell_text = Constants.COLOR_TEXT;
+
+    final String board_top = (cell_text == Constants.SIMPLE_TEXT) ? "   -----------------\n" : "    ╭─────────────────╮\n";
+    final String board_bottom = (cell_text == Constants.SIMPLE_TEXT) ? "   -----------------\n" : "    ╰─────────────────╯\n";
+    final String board_left = (cell_text == Constants.SIMPLE_TEXT) ? "| " : "│ ";
+    final String board_right = (cell_text == Constants.SIMPLE_TEXT) ? "|" : "│";
+
+    int red_pieces = 0;
+    int white_pieces = 0;
+
+    // Count pieces
+    for (int i = 0; i < NUMBER_OF_SQUARES; i++) {
+      if (0 != (this.get(i) & Constants.CELL_RED)) {
+        ++red_pieces;
+      } else if (0 != (this.get(i) & Constants.CELL_WHITE)) {
+        ++white_pieces;
+      }
+    }
+
+    /* Use a StringBuffer to compose the string */
+    StringBuffer ss = new StringBuffer();
+
+    /* Draw the board with numbers around it indicating cell index and put text
+     * to the right of the board.
+     */
+    ss.append(board_top);
+    ss.append("  0 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(0, c)]);
+    }
+    ss.append(board_right + " 3\n");
+
+    ss.append("  4 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(1, c)]);
+    }
+    ss.append(board_right + " 7\n");
+
+    ss.append("  8 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(2, c)]);
+    }
+    ss.append(board_right + " 11   Last move: " + mLastMove.toString());
+
+    if ((pPlayer == Constants.CELL_RED && this.isRedWin()) ||
+      (pPlayer == Constants.CELL_WHITE && this.isWhiteWin()) ) {
+      ss.append(" (WOHO! I WON!)\n");
+    } else if ((pPlayer == Constants.CELL_RED && this.isWhiteWin()) ||
+        (pPlayer == Constants.CELL_WHITE && this.isRedWin()) ) {
+      ss.append(" (Bummer! I lost!)\n");
+    } else {
+      ss.append("\n");
+    }
+
+    ss.append(" 12 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(3, c)]);
+    }
+    ss.append(board_right + " 15   Next player: " + cell_text[mNextPlayer] +
+    			((mNextPlayer == pPlayer) ? " (My turn)\n" : " (Opponents turn)\n"));
+
+    ss.append(" 16 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(4, c)]);
+    }
+    ss.append(board_right + " 19   Moves until draw: " + (int) mMovesUntilDraw + "\n");
+
+    ss.append(" 20 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(5, c)]);
+    }
+    ss.append(board_right + " 23   Red pieces:   " + red_pieces + "\n");
+
+    ss.append(" 24 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(6,c)]);
+    }
+    ss.append(board_right + " 27   White pieces: " + white_pieces + "\n");
+
+    ss.append(" 28 " + board_left);
+    for(int c = 0; c < 8; c++) {
+      ss.append(cell_text[this.get(7,c)]);
+    }
+    ss.append(board_right + " 31\n");
+
+    ss.append(board_bottom);
+
+    return ss.toString();
+  }
+
+  /**
+   * Converts the board to a machine-readable string ready to be printed to
+   * System.out.
+   *
+   * Note: This is used for passing board states between clients.
+   */
+  public String toMessage() {
+    // Use a StringBuffer to compose the message
+    StringBuffer ss = new StringBuffer();
+
+    // The board goes first
+    for(int i = 0; i < NUMBER_OF_SQUARES; i++) {
+      ss.append(Constants.MESSAGE_SYMBOLS[mCell[i]]);
+    }
+
+    // Then the information about moves
+    assert(mNextPlayer == Constants.CELL_WHITE ||
+    			mNextPlayer == Constants.CELL_RED);
+
+    ss.append(" " + mLastMove.toMessage() + " " +
+    		Constants.MESSAGE_SYMBOLS[mNextPlayer] + " " +
+    		(int) mMovesUntilDraw);
+
+    return ss.toString();
+  }
+
+  /**
+   * Gets the last move made (the move that led to the current state).
+   */
+  public final Move getMove() {
+    return this.mLastMove;
+  }
+
+  /**
+   * Gets the next player (the player whose turn is after this one).
+   */
+  public final int getNextPlayer() {
+    return this.mNextPlayer;
+  }
+
+  /**
+   * Gets number of moves until draw.
+   */
+  final int getMovesUntilDraw() {
+    return this.mMovesUntilDraw;
+  }
+
+  /**
+   * Gets whether or not the current move marks the beginning of the game.
+   */
+  boolean isBOG() {
+    return this.mLastMove.isBOG();
+  }
+
+  /**
+   * Gets whether or not the current move marks the end of the game.
+   */
+  boolean isEOG() {
+    return this.mLastMove.isEOG();
+  }
+
+  /**
+   * Gets whether or not the last move ended in a win for red player.
+   */
+  boolean isRedWin() {
+    return this.mLastMove.isRedWin();
+  }
+
+  /**
+   * Gets whether or not the last move ended in a win for white player.
+   */
+  boolean isWhiteWin() {
+    return mLastMove.isWhiteWin();
+  }
+
+  /**
+   * Gets whether or not the last move ended in a draw.
+   */
+  boolean isDraw() {
+    return mLastMove.isDraw();
+  }
+}

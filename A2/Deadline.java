@@ -9,12 +9,12 @@ public class Deadline {
 
   /** 
    * Gets CPU time in nanoseconds (but likely with millisecond or microsecond
-   * precision).
+   *  precision).
    */
   public static long getCpuTime() {
-    ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+    ThreadMXBean bean = ManagementFactory.getThreadMXBean( );
     return bean.isCurrentThreadCpuTimeSupported() ?
-        bean.getCurrentThreadCpuTime() : 0;
+        bean.getCurrentThreadCpuTime() : 0L;
   }
   
   /**

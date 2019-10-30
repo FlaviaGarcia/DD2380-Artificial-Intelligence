@@ -1,10 +1,11 @@
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
 
 
 public class HMM1 {
 
-    public static double getProbabilityObservations(Matrix A, Matrix B, Matrix Pi, int[] observationsArray){
+    public static double getProbabilityObservations(Matrix A, Matrix B, Matrix Pi, ArrayList<Integer> observationsArray){
         double probabilityObservations = 0;
         double[] lastAlpha = getLastAlpha(A, B, Pi, observationsArray);
 
@@ -15,7 +16,7 @@ public class HMM1 {
     }
 
 
-    public static double[] getLastAlpha(Matrix A, Matrix B, Matrix Pi, int[] observationsArray){
+    public static double[] getLastAlpha(Matrix A, Matrix B, Matrix Pi, ArrayList<Integer> observationsArray){
         Matrix alphaPerT = calculateAlphaPerT(A,B,Pi, observationsArray);
         double[] lastAlpha = alphaPerT.getColumn(alphaPerT.getNcols() - 1);
 
@@ -24,21 +25,21 @@ public class HMM1 {
     }
 
 
-    public static Matrix calculateAlphaPerT(Matrix A, Matrix B, Matrix Pi, int[] observationsArray){
+    public static Matrix calculateAlphaPerT(Matrix A, Matrix B, Matrix Pi, ArrayList<Integer> observationsArray){
         int numberStates = A.getNcols();
-        int numberObservations = observationsArray.length;
+        int numberObservations = observationsArray.size();
         Matrix alphaPerT = new Matrix(numberStates, numberObservations);
 
-        double[] initializedAlpha = initializeAlpha(Pi, B, observationsArray[0]);
+        double[] initializedAlpha = initializeAlpha(Pi, B, observationsArray.get(0));
 
-        alphaPerT.setColumnToMatrixValues(initializedAlpha, 0);
+        alphaPerT.setColumn(initializedAlpha, 0);
 
         double[] previousAlpha;
 
         for(int t=1; t<alphaPerT.getNcols(); t++){
             previousAlpha = alphaPerT.getColumn(t-1);
-            double[] AlphatT = getAlphaAtT(previousAlpha, A, B, observationsArray[t]);
-            alphaPerT.setColumnToMatrixValues(AlphatT, t);
+            double[] AlphatT = getAlphaAtT(previousAlpha, A, B, observationsArray.get(t));
+            alphaPerT.setColumn(AlphatT, t);
         }
 
         return alphaPerT;
@@ -79,7 +80,7 @@ public class HMM1 {
         Arrays.fill(nextStatePrediction, 0.0);
         for (int row=0; row<nextStatePredictionLength; row++){
             for(int i=0; i<nextStatePredictionLength; i++){
-                nextStatePrediction[row] += previousAlpha[i] * A.getMatrixValues()[i][row];
+                nextStatePrediction[row] += previousAlpha[i] * A.get(i,row);
             }
         }
         return nextStatePrediction;
@@ -92,7 +93,7 @@ public class HMM1 {
         Matrix A = Matrix.readMatrixFromLine(scanner);
         Matrix B = Matrix.readMatrixFromLine(scanner);
         Matrix Pi = Matrix.readMatrixFromLine(scanner);
-        int[] observationsArray = VectorUtils.readVectorObservationsFromLine(scanner);
+        ArrayList<Integer> observationsArray = VectorUtils.readVectorObservationsFromLine(scanner);
 
         // Compute probability observations
         double probabilityObservations = getProbabilityObservations(A, B, Pi, observationsArray);

@@ -5,11 +5,11 @@ public class HMM {
     public Matrix A;
     public Matrix B;
     private Matrix pi;
-    private int[] observations;
+    public ArrayList<Integer> observations = new ArrayList<>();
     // Forward probability structures
-    private ForwardAlgorithm.Alpha alpha;
+    public ForwardAlgorithm.Alpha alpha;
     // Backward probability structures
-    private Matrix beta;
+    public Matrix beta;
     // Decoding structures
     public Matrix delta;
     public Matrix statesMaxDelta;
@@ -18,16 +18,22 @@ public class HMM {
     public Matrix gamma;
 
     public HMM(Matrix a, Matrix b, Matrix pi) {
-        A = a;
-        B = b;
+        this.A = a;
+        this.B = b;
         this.pi = pi;
     }
 
-    public HMM(Matrix a, Matrix b, Matrix pi, int[] observations) {
+    public HMM(Matrix a, Matrix b, Matrix pi, ArrayList<Integer> observations) {
         this.A = a;
         this.B = b;
         this.pi = pi;
         this.observations = observations;
+    }
+
+    public HMM(int nstates, int nemissions, int precision) {
+        this.A = VectorUtils.rowStochasticMatrix(nstates, nstates, precision);
+        this.B = VectorUtils.rowStochasticMatrix(nstates, nemissions, precision);
+        this.pi = VectorUtils.rowStochasticMatrix(1, nstates, precision);
     }
 
     // --- start getters and setters ---
@@ -55,12 +61,23 @@ public class HMM {
         this.pi = pi;
     }
 
-    public void setObservations(int[] observations) { this.observations = observations; }
-
-    public int nStates() {
+    public int numberOfStates() {
         return A.getNrows();
     }
-    // --- end getters and setters ---
+
+    public int observationsLength() { return observations.size(); }
+
+    public void setObservations(ArrayList<Integer> observations) {
+        this.observations = observations;
+    }
+
+    public void computeAlpha(boolean normalize) {
+        this.alpha = ForwardAlgorithm.forward(A, B, pi, observations,true);
+    }
+
+    public void computeBeta() {
+        this.beta = BackwardAlgorithm.calculateBetaPerT(A, B, observations, alpha.scaleFactors);
+    }
 
     /**
      * Returns the most likely state sequence from the observations
@@ -69,14 +86,14 @@ public class HMM {
      */
     public int[] decode() {
         int nStates = A.getNrows();
-        int nObservations = observations.length;
+        int nObservations = observations.size();
         delta = new Matrix(nStates, nObservations);
         statesMaxDelta = new Matrix(nStates, nObservations);
-        int[] stateSequence = new int[observations.length];
+        int[] stateSequence = new int[observations.size()];
 
         // Initialize first column of sigma
         for (int state = 0; state < delta.getNrows(); state++) {
-            delta.set(state, 0, Math.log(pi.get(0, state) * B.get(state, observations[0])));
+            delta.set(state, 0, Math.log(pi.get(0, state) * B.get(state, observations.get(0))));
         }
 
         // Computing delta and statesMaxDelta from col 1 to end
@@ -120,7 +137,7 @@ public class HMM {
     private Argmax argmaxDeltaT(int state, int time, int nstates) {
         Argmax res = new Argmax();
         for (int j = 0; j < nstates; j++) {
-            double partialProbability = Math.log(A.get(j, state)) + delta.get(j, time - 1) + Math.log(B.get(state, observations[time]));
+            double partialProbability = Math.log(A.get(j, state)) + delta.get(j, time - 1) + Math.log(B.get(state, observations.get(time)));
             if (partialProbability > res.maxValue) {
                 res.maxValue = partialProbability;
                 res.maxIdx = j;
@@ -147,40 +164,47 @@ public class HMM {
         return res;
     }
 
-    public void learnFromObservations(int maxIterations, double threshold) {
+    public int learnFromObservations(int maxIterations, double threshold) {
         double lastLogProb = 0;
+        int iterations = 0;
         for (int i = 0; i < maxIterations; i++) {
-            alpha = ForwardAlgorithm.calculateAlphaPerT(A, B, pi, observations, true);
-            beta = BackwardAlgorithm.calculateBetaPerT(A, B, observations, alpha.scaleFactors);
-            digamma = computeDigammaMatrix();
+            if (alpha == null || alpha.alphaMatrix.getNcols() < observations.size())
+                alpha = ForwardAlgorithm.forward(A, B, pi, observations, true);
+            if (beta == null || beta.getNcols() < observations.size())
+                beta = BackwardAlgorithm.calculateBetaPerT(A, B, observations, alpha.scaleFactors);
+            digamma = computeDigammaMatrices();
             gamma = computeGammaMatrix();
             A = updateA();
             B = updateB();
             pi = new Matrix(pi.getNrows(), pi.getNcols(), gamma.getColumn(0));
-            double newLogProb = logProbability(alpha.scaleFactors);
-            double difference = Math.abs(newLogProb - lastLogProb);
+            double newLogProb = logProbabilityObservations();
+            double difference = Math.abs(Math.abs(newLogProb) - Math.abs(lastLogProb));
             if (difference < threshold) {
                 break;
             }
             lastLogProb = newLogProb;
+            iterations++;
+            alpha = ForwardAlgorithm.forward(A, B, pi, observations, true);
+            beta = BackwardAlgorithm.calculateBetaPerT(A, B, observations, alpha.scaleFactors);
         }
+        return iterations;
     }
 
     /**
      * Initializes the array of digamma matrices.
      * @return array of Matrix in which the i-th matrix is digamma at time i
      */
-    private ArrayList<Matrix> computeDigammaMatrix() {
-        ArrayList<Matrix> digamma = new ArrayList<>(observations.length - 1);
-        for (int time = 0; time < observations.length - 1; time++)
-            digamma.add(computeDigammaMatrixPerT(time));
+    private ArrayList<Matrix> computeDigammaMatrices() {
+        ArrayList<Matrix> digamma = new ArrayList<>(observations.size() - 1);
+        for (int time = 0; time < observations.size() - 1; time++)
+            digamma.add(computeDigammaMatrix(time));
         return digamma;
     }
 
-    private Matrix computeDigammaMatrixPerT(int time) {
-        Matrix digammaT = new Matrix(nStates(), nStates());
-        for (int stateFrom = 0; stateFrom < nStates(); stateFrom++) {
-            for (int stateTo = 0; stateTo < nStates(); stateTo++) {
+    private Matrix computeDigammaMatrix(int time) {
+        Matrix digammaT = new Matrix(numberOfStates(), numberOfStates());
+        for (int stateFrom = 0; stateFrom < numberOfStates(); stateFrom++) {
+            for (int stateTo = 0; stateTo < numberOfStates(); stateTo++) {
                 double digammaNum = diGammaNumerator(stateFrom, stateTo, time);
                 digammaT.set(stateFrom, stateTo, digammaNum);
             }
@@ -198,14 +222,17 @@ public class HMM {
      * @return numerator of digamma_t(stateFrom, stateTo)
      */
     private double diGammaNumerator(int stateFrom, int stateTo, int time) {
-        double numerator = alpha.alphaMatrix.get(stateFrom, time) * A.get(stateFrom, stateTo) * B.get(stateTo, observations[time + 1]) * beta.get(stateTo, time + 1);
-        return numerator;
+        double alphaVal = alpha.alphaMatrix.get(stateFrom, time);
+        double aVal = A.get(stateFrom, stateTo);
+        double bVal = B.get(stateTo, observations.get(time + 1));
+        double betaVal = beta.get(stateTo, time+1);
+        return alphaVal * aVal * bVal * betaVal;
     }
 
     private Matrix computeGammaMatrix() {
-        Matrix res = new Matrix(nStates(), observations.length - 1);
-        for (int time = 0; time < observations.length - 1; time++) {
-            for (int state = 0; state < nStates(); state++) {
+        Matrix res = new Matrix(numberOfStates(), observations.size() - 1);
+        for (int time = 0; time < observations.size() - 1; time++) {
+            for (int state = 0; state < numberOfStates(); state++) {
                 double gammaCell = gammaNumerator(time, state);
                 res.set(state, time, gammaCell);
             }
@@ -215,16 +242,16 @@ public class HMM {
 
     private double gammaNumerator(int time, int state) {
         double res = 0;
-        for (int i = 0; i < nStates(); i++) {
+        for (int i = 0; i < numberOfStates(); i++) {
             res += digamma.get(time).get(state, i);
         }
         return res;
     }
 
     private Matrix updateA() {
-        Matrix newA = new Matrix(nStates(), nStates());
-        for (int i = 0; i < nStates(); i++) {
-            for (int j = 0; j < nStates(); j++) {
+        Matrix newA = new Matrix(numberOfStates(), numberOfStates());
+        for (int i = 0; i < numberOfStates(); i++) {
+            for (int j = 0; j < numberOfStates(); j++) {
                 double newValue = newAat(i, j);
                 newA.set(i, j, newValue);
             }
@@ -237,44 +264,68 @@ public class HMM {
         double upperSum = 0;
         double lowerSum = 0;
 
-        for (int time = 0; time < observations.length - 1; time++) {
+        for (int time = 0; time < observations.size() - 1; time++) {
             upperSum += digamma.get(time).get(stateFrom, stateTo);
             lowerSum += gamma.get(stateFrom, time);
         }
-
-//        System.out.println("A("+stateFrom+","+stateTo+")"+" = "+upperSum+"/"+lowerSum+" = "+(upperSum/lowerSum));
         return upperSum / lowerSum;
     }
 
     private Matrix updateB() {
-        Matrix newB = new Matrix(nStates(), B.getNcols());
-        for (int state = 0; state < nStates(); state++) {
+        Matrix newB = new Matrix(numberOfStates(), B.getNcols());
+        boolean[] normalizeRow = new boolean[B.getNrows()];
+        for (int state = 0; state < numberOfStates(); state++) {
             for (int emission = 0; emission < B.getNcols(); emission++) {
-                double newValue = newBat(state, emission);
-                newB.set(state, emission, newValue);
+                double upperSum = 0;
+                double lowerSum = 0;
+                double res;
+                for (int time = 0; time < observations.size() - 1; time++) {
+                    if (observations.get(time) == emission)
+                        upperSum += gamma.get(state, time);
+                    lowerSum += gamma.get(state, time);
+                }
+                if (upperSum == 0) {
+                    upperSum += Double.MIN_VALUE * 1000;
+                    normalizeRow[state] = true;
+                }
+                res = upperSum / lowerSum;
+                newB.set(state, emission, res);
             }
+        }
+
+        for (int row = 0; row < newB.getNrows(); row++) {
+            if (normalizeRow[row])
+                newB.normalizeRow(row);
         }
         return newB;
     }
 
-    private double newBat(int state, int emission) {
-        double upperSum = 0;
-        double lowerSum = 0;
-
-        for (int time = 0; time < observations.length - 1; time++) {
-            if (observations[time] == emission)
-                upperSum += gamma.get(state, time);
-            lowerSum += gamma.get(state, time);
-        }
-        return upperSum / lowerSum;
+    public double logProbabilityObservations() {
+        return alpha.logPObservations();
     }
 
-    public double logProbability(double[] scaleFactors) {
-        double sum = 0;
-        for (double factor : scaleFactors) {
-            sum+=-Math.log(factor);
+    /**
+     * Probability of the observed sequence. Be careful: can underflow in few hundreds of observations
+     * @return P(observations)
+     */
+    public double probabilityObservations() {
+        return Math.exp(logProbabilityObservations());
+    }
+
+    public double logProbabilityObservations(ArrayList<Integer> observations) {
+        ForwardAlgorithm.Alpha alpha = ForwardAlgorithm.forward(A, B, pi, observations, true);
+        return alpha.logPObservations();
+    }
+
+    ArrayList<Integer> generateObservations(int n) {
+        ArrayList<Integer> result = new ArrayList<>();
+        int state = VectorUtils.randomForDistribution(pi.matrixToArray());
+        for (int i = 0; i < n; i++) {
+            int observation = VectorUtils.randomForDistribution(B.getRowAsArray(state));
+            result.add(observation);
+            state = VectorUtils.randomForDistribution(A.getRowAsArray(state));
         }
-        return sum;
+        return result;
     }
 
 }

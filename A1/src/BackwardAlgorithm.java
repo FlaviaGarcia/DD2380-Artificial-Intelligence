@@ -1,27 +1,27 @@
-import javax.annotation.processing.SupportedSourceVersion;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class BackwardAlgorithm {
 
 
-    public static Matrix calculateBetaPerT(Matrix A, Matrix B, int[] observationsArray, double[] scaleFactors){
+    public static Matrix calculateBetaPerT(Matrix A, Matrix B, ArrayList<Integer> observationsArray, ArrayList<Double> scaleFactors){
         int numberStates = A.getNcols();
-        int numberObservations = observationsArray.length;
+        int numberObservations = observationsArray.size();
 
         Matrix betaPerT = new Matrix(numberStates, numberObservations);
 
         double[] initializedBeta = initializeBeta(numberStates);
-        betaPerT.setColumnToMatrixValues(initializedBeta, numberObservations-1);
+        betaPerT.setColumn(numberObservations-1, initializedBeta);
         if (scaleFactors != null)
-            betaPerT.divideColumnBy(scaleFactors[numberObservations - 1], numberObservations - 1);
+            betaPerT.divideColumnBy(scaleFactors.get(numberObservations - 1), numberObservations - 1);
 
 
         for(int t = numberObservations-2; t>=0; t--){
             double[] nextBeta = betaPerT.getColumn(t+1);
-            double[] betaAtT = calculateBetaAtT(nextBeta, A, B, observationsArray[t+1]);
-            betaPerT.setColumnToMatrixValues(betaAtT, t);
+            double[] betaAtT = calculateBetaAtT(nextBeta, A, B, observationsArray.get(t+1));
+            betaPerT.setColumn(t, betaAtT);
             if (initializedBeta != null) {
-                betaPerT.divideColumnBy(scaleFactors[t], t);
+                betaPerT.divideColumnBy(scaleFactors.get(t), t);
             }
         }
         return betaPerT;
@@ -46,22 +46,5 @@ public class BackwardAlgorithm {
 
         return beta;
     }
-
-
-    /**public static void main(String[] args) {
-        // Read inputs
-        Scanner scanner = new Scanner(System.in);
-        Matrix A = Matrix.readMatrixFromLine(scanner);
-        Matrix B = Matrix.readMatrixFromLine(scanner);
-        Matrix Pi = Matrix.readMatrixFromLine(scanner);
-        int[] observationsArray = VectorUtils.readVectorObservationsFromLine(scanner);
-
-        // Compute probability observations
-        Matrix betaPerT = calculateBetaPerT(A, B, Pi, observationsArray);
-
-        System.out.println(betaPerT.toString());
-
-    }**/
-
 
 }

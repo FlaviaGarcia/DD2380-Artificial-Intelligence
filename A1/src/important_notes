@@ -1,0 +1,12 @@
+# Important notes on the program
+
+## Tuning parameters
+- Number of states
+- Number of emissions
+- Maximum number of observations kept by the classifier
+- Learning precision: threshold that determines when the update is accurate
+enough to stop updating the model, i.e. 
+current logP(observations) - previous logP(observations) < Learning precision --> STOP
+- Default probability for emission that is never observed: when learning and updating B, we may
+have an emission that we never encountered. To not have 0 in the correspondent column of B,
+we add one to the numerator

@@ -1,64 +1,42 @@
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class ForwardAlgorithm {
 
-    public static double getProbabilityObservations(Matrix A, Matrix B, Matrix Pi, int[] observationsArray){
-        double probabilityObservations = 0;
-        double[] lastAlpha = getLastAlpha(A, B, Pi, observationsArray);
-
-        for(int i=0; i<lastAlpha.length; i++){
-            probabilityObservations += lastAlpha[i];
-        }
-        return probabilityObservations;
-    }
-
-    public static double[] getLastAlpha(Matrix A, Matrix B, Matrix Pi, int[] observationsArray){
-        Matrix alphaPerT = calculateAlphaPerT(A,B,Pi, observationsArray, false).alphaMatrix;
-        double[] lastAlpha = alphaPerT.getColumn(alphaPerT.getNcols() - 1);
-
-        return lastAlpha;
-
-    }
-
-
-    public static Alpha calculateAlphaPerT(Matrix A, Matrix B, Matrix Pi, int[] observationsArray, boolean normalized){
+    public static Alpha forward(Matrix A, Matrix B, Matrix Pi, ArrayList<Integer> observationsArray, boolean normalized){
         int numberStates = A.getNcols();
-        int numberObservations = observationsArray.length;
+        int numberObservations = observationsArray.size();
         Alpha alpha = new Alpha(numberStates, numberObservations);
 
-        double[] initializedAlpha = initializeAlpha(Pi, B, observationsArray[0]);
-        alpha.alphaMatrix.setColumnToMatrixValues(initializedAlpha, 0);
+        double[] initializedAlpha = initializeAlpha(Pi, B, observationsArray.get(0));
+        alpha.alphaMatrix.setColumn(0, initializedAlpha);
 
         if (normalized) {
             double scaleFactor = VectorUtils.sum(initializedAlpha);
             alpha.alphaMatrix.divideColumnBy(scaleFactor, 0);
-            alpha.scaleFactors[0] = scaleFactor;
+            alpha.scaleFactors.add(scaleFactor);
         }
-
 
         double[] previousAlpha;
 
         for(int t=1; t<alpha.alphaMatrix.getNcols(); t++){
             previousAlpha = alpha.alphaMatrix.getColumn(t-1);
-            double[] AlphatT = calculateAlphaAtT(previousAlpha, A, B, observationsArray[t]);
-            alpha.alphaMatrix.setColumnToMatrixValues(AlphatT, t);
+            double[] AlphatT = calculateAlphaAtT(previousAlpha, A, B, observationsArray.get(t));
+            alpha.alphaMatrix.setColumn(t, AlphatT);
             if (normalized) {
                 double scaleFactor = VectorUtils.sum(AlphatT);
                 alpha.alphaMatrix.divideColumnBy(scaleFactor, t);
-                alpha.scaleFactors[t] = scaleFactor;
+                alpha.scaleFactors.add(scaleFactor);
             }
         }
         return alpha;
     }
 
-
-    public static double[] initializeAlpha(Matrix Pi, Matrix B, int FirstObservation){
+    public static double[] initializeAlpha(Matrix Pi, Matrix B, int firstObservation){
         double[] PiArray = Pi.matrixToArray();
-        double[] initializedAlpha = VectorUtils.elementWiseVectorsProduct(PiArray, B.getColumn(FirstObservation));
+        double[] initializedAlpha = VectorUtils.elementWiseVectorsProduct(PiArray, B.getColumn(firstObservation));
         return initializedAlpha;
     }
-
-
 
     public static double[] calculateAlphaAtT(double[] previousAlpha, Matrix A, Matrix B, int observation){
         double[] predictionAtT = getNextStatePrediction(previousAlpha, A);
@@ -72,7 +50,7 @@ public class ForwardAlgorithm {
         Arrays.fill(nextStatePrediction, 0.0);
         for (int row=0; row<nextStatePredictionLength; row++){
             for(int i=0; i<nextStatePredictionLength; i++){
-                nextStatePrediction[row] += previousAlpha[i] * A.getMatrixValues()[i][row];
+                nextStatePrediction[row] += previousAlpha[i] * A.get(i, row);
             }
         }
         return nextStatePrediction;
@@ -80,11 +58,17 @@ public class ForwardAlgorithm {
 
     public static class Alpha {
         public Matrix alphaMatrix;
-        public double scaleFactors[] = null;
+        public ArrayList<Double> scaleFactors = new ArrayList<>();
 
         public Alpha(int nstates, int nobservations) {
             alphaMatrix = new Matrix(nstates, nobservations);
-            scaleFactors = new double[nobservations];
+        }
+
+        public double logPObservations () {
+            double sum = 0;
+            for (double f : scaleFactors)
+                sum += Math.log(f);
+            return sum;
         }
     }
 }
