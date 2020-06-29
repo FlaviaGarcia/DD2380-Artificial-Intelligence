@@ -1,4 +1,4 @@
-Assignments of the course Artificial Intelligence () of KTH. These assignments were developed in Java and the following bullet points describe more in detailled what they were about: 
+Assignments of the course Artificial Intelligence (DD2380) of KTH. These assignments were developed in Java and the following bullet points describe more in detailled what they were about: 
 
 - A1: Hidden Markov Models (HMM) were used to developed the DuckHunt game. We needed to predict the next move of the bird to shoot it. Also the specie of the bird had to be predicted.
 
